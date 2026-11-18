@@ -368,7 +368,7 @@ function rasca(premio, sub){
   return c => {
     c.innerHTML = '<p class="hint">Rascá con el dedo ✨</p><div class="scratch" id="sc"><div class="prize"><b>' + premio + '</b><span>' + sub + '</span></div><canvas id="cv"></canvas></div>';
     const wrap = c.querySelector("#sc"), cv = c.querySelector("#cv");
-    const w = wrap.offsetWidth, h = wrap.offsetHeight, dpr = window.devicePixelRatio || 1;
+    const w = wrap.offsetWidth || 300, h = wrap.offsetHeight || 150, dpr = window.devicePixelRatio || 1;
     cv.width = w * dpr; cv.height = h * dpr;
     const ctx = cv.getContext("2d");
     ctx.scale(dpr, dpr);
@@ -382,44 +382,54 @@ function rasca(premio, sub){
     const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * (w / r.width), (e.clientY - r.top) * (h / r.height)]; };
     const raya = e => { if (!down || listo) return; const [x,y] = pos(e); ctx.beginPath(); ctx.arc(x, y, 18, 0, 7); ctx.fill(); };
     const revisar = () => {
-      const d = ctx.getImageData(0, 0, cv.width, cv.height).data; let t = 0;
-      for (let k = 3; k < d.length; k += 16) if (d[k] === 0) t++;
-      if (t / (d.length / 16) > 0.5){ listo = true; cv.style.opacity = 0; cv.style.pointerEvents = "none"; confetti(); }
+      if (listo) return;
+      let d; try { d = ctx.getImageData(0, 0, cv.width, cv.height).data; } catch { return; }
+      let t = 0, tot = 0;
+      for (let k = 3; k < d.length; k += 16){ tot++; if (d[k] === 0) t++; }
+      if (tot && t / tot > 0.45){ listo = true; cv.style.opacity = 0; cv.style.pointerEvents = "none"; confetti(); }
     };
-    cv.addEventListener("pointerdown", e => { down = true; cv.setPointerCapture(e.pointerId); raya(e); });
-    cv.addEventListener("pointermove", raya);
+    cv.addEventListener("pointerdown", e => { down = true; try { cv.setPointerCapture(e.pointerId); } catch {} raya(e); });
+    cv.addEventListener("pointermove", e => { raya(e); });
     cv.addEventListener("pointerup", () => { down = false; revisar(); });
+    cv.addEventListener("pointercancel", () => { down = false; revisar(); });
   };
 }
 
-function ruleta(opciones){
+function ruleta(id, opciones){
   return c => {
+    const key = "ruleta_" + id;
     const n = opciones.length, seg = 360 / n;
     const colores = ["#2a1d18","#1a1a1c"];
     const grad = opciones.map((_, i) => colores[i % 2] + " " + (i*seg) + "deg " + ((i+1)*seg) + "deg").join(",");
     c.innerHTML = '<div class="wheelwrap"><div class="pointer"></div><div class="wheel" id="wh"></div></div>' +
       '<button class="btn fill" id="girar">Girar</button><p class="msg" id="res"></p><div class="legend">' +
       opciones.map(o => o.e + " " + o.t).join("<br>") + '</div>';
-    const wh = c.querySelector("#wh");
+    const wh = c.querySelector("#wh"), btn = c.querySelector("#girar"), res = c.querySelector("#res");
     wh.style.background = "conic-gradient(" + grad + ")";
     opciones.forEach((o, i) => {
       const l = document.createElement("div"); l.className = "lab"; l.textContent = o.e;
-      const a = (i + .5) * seg;
-      l.style.transform = "rotate(" + a + "deg) translateY(-78px)";
+      l.style.transform = "rotate(" + ((i + .5) * seg) + "deg) translateY(-78px)";
       wh.appendChild(l);
     });
-    let rot = 0, girando = false;
-    c.querySelector("#girar").onclick = () => {
-      if (girando) return; girando = true;
-      c.querySelector("#res").textContent = "";
-      rot += 1440 + Math.floor(Math.random() * 360);
-      wh.style.transform = "rotate(" + rot + "deg)";
-      setTimeout(() => {
-        const ang = (360 - (rot % 360)) % 360;
-        const o = opciones[Math.floor(ang / seg) % n];
-        c.querySelector("#res").textContent = o.e + " " + o.t;
-        girando = false; confetti();
-      }, 4300);
+    const bloquear = () => { btn.disabled = true; btn.textContent = "Ya giraste"; btn.style.opacity = .45; btn.style.pointerEvents = "none"; };
+    const mostrar = i => { res.textContent = opciones[i].e + " " + opciones[i].t; };
+    const girarA = (i, animar) => {
+      const destino = (i + .5) * seg + (Math.random() - .5) * seg * .6;
+      const rot = 1440 + (360 - destino);
+      if (!animar){ wh.style.transition = "none"; wh.style.transform = "rotate(" + rot + "deg)"; return; }
+      requestAnimationFrame(() => { wh.style.transform = "rotate(" + rot + "deg)"; });
+    };
+    const previo = lsGet(key, null);
+    if (previo !== null && opciones[previo]){
+      girarA(previo, false); mostrar(previo); bloquear(); return;
+    }
+    btn.onclick = () => {
+      if (lsGet(key, null) !== null) return;
+      const i = Math.floor(Math.random() * n);
+      lsSet(key, i);              // se guarda ANTES de girar: no se puede recargar para volver a tirar
+      bloquear();
+      girarA(i, true);
+      setTimeout(() => { mostrar(i); confetti(); }, 4300);
     };
   };
 }
@@ -511,7 +521,7 @@ const REGALOS = {
   7:  { titulo:"Vale por una peli", render: vale(7, "Noche de peli a tu elección", "Elegís la peli, yo pongo la comida y no me quejo de la elección.") },
   8:  { titulo:"¿Cuánto me conocés?", render: quiz(QUIZ1, ["Tenemos que hablar más 😅","Algo sabés, vamos bien","Me conocés bastante","¡Me conocés mejor que yo mismo!"]) },
   9:  { titulo:"Abrir cuando necesites un abrazo", render: carta("Si estás leyendo esto es porque hoy necesitabas algo lindo.\n\nQuiero que sepas que no importa qué día tuviste: estoy de tu lado, siempre. Respirá, tomá algo calentito y acordate de lo fuerte que sos.\n\nCuando nos veamos, me debés un abrazo largo. Yo también necesito uno.") },
-  10: { titulo:"Ruleta de planes", render: ruleta([{e:"🍿",t:"Noche de peli y comida"},{e:"🍦",t:"Helado a la salida"},{e:"🍳",t:"Cocinamos juntos"},{e:"💆",t:"Masaje de 10 minutos"},{e:"🎮",t:"Noche de juegos"},{e:"☕",t:"Café y charla larga"}]) },
+  10: { titulo:"Ruleta de planes", render: ruleta(10, [{e:"🍿",t:"Noche de peli y comida"},{e:"🍦",t:"Helado a la salida"},{e:"🍳",t:"Cocinamos juntos"},{e:"💆",t:"Masaje de 10 minutos"},{e:"🎮",t:"Noche de juegos"},{e:"☕",t:"Café y charla larga"}]) },
   11: { titulo:"Regalo de verdad", render: fisico("📸", "Hoy tu regalo es algo secreto <br>Pedímela, o buscala.") },
   12: { titulo:"Ahorcado", render: ahorcado("abrazos", "¡Eso mismo! Hoy toca abrazo, así que cobralo. 🤍") },
   13: { titulo:"Vale por un masaje", render: vale(13, "Un masaje de 20 minutos", "Espalda, cuello o lo que necesites. Sin quejas y sin cronómetro estricto.") },
@@ -523,7 +533,7 @@ const REGALOS = {
   19: { titulo:"Regalo de verdad", render: fisico("🎁", "Hoy tu regalo es algo chiquito que podés llevar con vos.<br>Pedímelo y descubrí qué es.") },
   20: { titulo:"Verdadero o falso", render: quiz(QUIZ2, ["Te falta conocerme 😄","No está mal, pero podés más","¡Casi perfecto!","¡Sabés todo sobre mí!"]) },
   21: { titulo:"Memoria difícil", render: memoria(["🎄","⛄","🦌","🔔","🍪","🧦","🕯️","🎅"], "¡Sos una máquina! 🤍") },
-  22: { titulo:"Ruleta de retos", render: ruleta([{e:"📸",t:"Foto mia de lo que quieras"},{e:"💌",t:"Decime 3 cosas que te gustan de mí"},{e:"🎶",t:"Subis una notita con una cancion para mi"},{e:"🤗",t:"Abrazo de 1 minuto sin hablar"},{e:"🍫",t:"Yo pago algo dulce"},{e:"❓",t:"Nada segui participando"}]) },
+  22: { titulo:"Ruleta de retos", render: ruleta(22, [{e:"📸",t:"Foto mia de lo que quieras"},{e:"💌",t:"Decime 3 cosas que te gustan de mí"},{e:"🎶",t:"Subis una notita con una cancion para mi"},{e:"🤗",t:"Abrazo de 1 minuto sin hablar"},{e:"🍫",t:"Yo pago algo dulce"},{e:"❓",t:"Nada segui participando"}]) },
   23: { titulo:"Vale por un día entero", render: vale(23, "Un día entero a tu elección", "Del desayuno a la noche: vos decidís qué hacemos y yo te acompaño en todo.") },
   24: { titulo:"Nochebuena", render: carta("Llegamos a Nochebuena, " + ELLA + ".\n\nQuería usar estas últimas líneas para decirte gracias: por el año, por las risas, por tu paciencia y por hacer que todo sea más lindo.\n\nMañana es el último día del calendario y tiene su sorpresa. Hoy solo quiero que disfrutes, que comas rico y que sientas lo querida que sos.\n\nFeliz Nochebuena. Te quiero muchísimo.") },
   25: { titulo:"Búsqueda del tesoro", render: tesoro() },
@@ -592,8 +602,8 @@ function abrir(n){
   $("mBig").textContent = n;
   $("mTitle").textContent = r.titulo || "Tu regalo del día";
   const body = $("mBody"); body.innerHTML = "";
-  r.render(body);
   $("overlay").classList.add("show");
+  r.render(body);
   guardarAbierto(n);
   dibujar();
 }
