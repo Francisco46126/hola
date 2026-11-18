@@ -182,15 +182,15 @@ const FOTO_PUZZLE = "foto-bn.jpg"; // la foto blanco y negro, en la misma carpet
 
 /* Preguntas del quiz: EDITÁ las opciones y poné en "ok" el índice de la correcta (0 = primera) */
 const QUIZ1 = [
-  { q:"¿Cuál es mi comida favorita?", op:["Pizza","Milanesa","Hamburguesa","Asado"], ok:0 },
-  { q:"¿Qué prefiero hacer un domingo?", op:["Dormir","Salir","Jugar","Ver pelis"], ok:0 },
+  { q:"¿Cuál es mi comida favorita?", op:["Pizza","Milanesa","Hamburguesa","Asado"], ok:2 },
+  { q:"¿Qué prefiero hacer un domingo?", op:["Dormir","Plaza","Jugar","Ver pelis"], ok:1 },
   { q:"¿Cuál es mi lugar favorito del mundo?", op:["Mi casa","La playa","La montaña","Estar con vos"], ok:3 },
   { q:"¿Qué es lo primero que pensé al conocerte?", op:["Qué linda","Qué simpática","Quiero conocerla","Todas juntas"], ok:3 },
   { q:"¿Cuánto te quiero?", op:["Mucho","Muchísimo","Un montón","Más que a nada"], ok:3 },
 ];
 /* Verdadero / falso (ok: true o false) */
 const QUIZ2 = [
-  { q:"Yo siempre llego puntual.", op:["Verdadero","Falso"], ok:1 },
+  { q:"Yo siempre llego puntual.", op:["Verdadero","Falso"], ok:0 },
   { q:"Me acuerdo de nuestro primer beso.", op:["Verdadero","Falso"], ok:0 },
   { q:"Odio los días de frío.", op:["Verdadero","Falso"], ok:1 },
   { q:"Prefiero ir al cine antes que ver pelis en casa.", op:["Verdadero","Falso"], ok:1 },
@@ -239,7 +239,7 @@ function vale(id, titulo, detalle){
         '<button class="btn ' + (usado ? "" : "fill") + '" id="canje">' + (usado ? "Canjeado ✓" : "Canjear") + '</button>';
       c.querySelector("#canje").onclick = () => {
         if (lsGet(key, false)) return;
-        lsSet(key, true); draw(); confetti(); toast("Vale canjeado, avisale a tu novio 😏");
+        lsSet(key, true); draw(); confetti(); toast("Vale canjeado, avisale a fran 😏");
       };
     };
     draw();
