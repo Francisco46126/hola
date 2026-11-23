@@ -139,6 +139,23 @@
   /* tesoro */
   .riddle{font-family:'Cormorant Garamond',serif;font-size:20px;line-height:1.5;font-style:italic;color:#f1e7da;text-align:center;background:#14110f;border:1px solid #2c2420;border-radius:14px;padding:20px 16px}
   .inp{width:100%;margin-top:14px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#101010;color:var(--text);font-family:inherit;font-size:15px;text-align:center}
+  /* laberinto */
+  .mz{display:block;width:100%;max-width:320px;height:auto;margin:0 auto;border:1px solid var(--line);border-radius:12px;background:#0f0d0c;touch-action:none}
+  .pad{display:flex;gap:10px;justify-content:center;margin-top:14px}
+  .pad .mini{width:54px;height:44px;font-size:16px}
+  /* sopa de letras */
+  .sopa{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;max-width:320px;margin:0 auto;touch-action:none;user-select:none;-webkit-user-select:none}
+  .sc{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#141414;border:1px solid var(--line);font-family:'Cormorant Garamond',serif;font-weight:600;font-size:20px;color:var(--silver)}
+  .sc.sel{background:#3a2a22;border-color:var(--wood);color:#fff}
+  .sc.found{background:var(--choco);border-color:var(--choco-light);color:#fff}
+  .words{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0 4px}
+  .words span{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:12px;letter-spacing:.15em;color:var(--silver)}
+  .words span.ok{border-color:var(--choco-light);color:#e8d3c4;text-decoration:line-through;opacity:.8}
+  .fin{margin-top:16px;animation:fade .6s}
+  /* título tocable (adivinanza secreta) */
+  #mTitle,#mBig{user-select:none;-webkit-user-select:none;touch-action:manipulation}
+  .tapx{animation:tapx .22s}
+  @keyframes tapx{50%{transform:scale(1.07)}}
   .conf{position:fixed;top:-20px;z-index:100;pointer-events:none;animation:fall linear forwards}
   @keyframes fall{to{transform:translateY(110vh) rotate(360deg);opacity:.7}}
 </style>
@@ -200,6 +217,22 @@ const QUIZ2 = [
 /* ============================================================
    UTILIDADES
    ============================================================ */
+/* Textos de los regalos nuevos (editá a gusto) */
+const ADIVINANZA2 =
+  "No tengo botón ni cerradura,<br>pero me despierto si me tocás con ganas.<br>" +
+  "Vivo bien arriba, vestido de letras grandes.<br>" +
+  "Para abrirme hace falta una mano entera:<br>tantos toques como dedos tengas en ella.<br>" +
+  "¿Quién soy? Probá tocarme.";
+const SECRETO_HTML =
+  "<p>¡Lo encontraste! Sabía que ibas a insistir hasta que se abriera, igual que conmigo 😏.</p>" +
+  "<p>Este es el secreto: cada vez que abrís este calendario, yo estoy del otro lado imaginándome tu cara. Todo esto lo hice pensando en vos.</p>" +
+  "<p>Te quiero.</p>";
+const ANIV_HTML =
+  "<p><b>Felices tres años, " + ELLA + ".</b> 🤍</p>" +
+  "<p>Tres años desde que empezamos y hoy te elijo igual que el primer día, o más. Gracias por cada risa, cada abrazo y por bancarme como soy.</p>" +
+  "<p>Quiero que sepas que esto recién empieza: hay un montón de cosas lindas por vivir con vos.</p>" +
+  "<p>Y como tres años no se festejan solo con un mensaje, hay algo más esperándote en la vida real. Pedímelo 😏</p>";
+
 const LS_KEY = "adviento_abiertos_" + ANIO;
 const $ = id => document.getElementById(id);
 const lsGet = (k,d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -434,6 +467,175 @@ function ruleta(id, opciones){
   };
 }
 
+function laberinto(cols, rows, msgFinal){
+  return c => {
+    const CS = 40, D = { N:[-1,0,"S"], E:[0,1,"W"], S:[1,0,"N"], W:[0,-1,"E"] };
+    c.innerHTML = '<p class="hint">Llevá el punto hasta el corazón. Arrastralo con el dedo o usá las flechas.</p>' +
+      '<canvas class="mz" id="mz"></canvas>' +
+      '<div class="pad"><button class="mini" data-d="W">◀</button><button class="mini" data-d="N">▲</button><button class="mini" data-d="S">▼</button><button class="mini" data-d="E">▶</button></div>' +
+      '<p class="msg" id="mzMsg"></p>';
+    // laberinto perfecto (siempre tiene solución)
+    const open = Array.from({length: rows}, () => Array.from({length: cols}, () => ({N:0,E:0,S:0,W:0})));
+    const seen = Array.from({length: rows}, () => Array(cols).fill(false));
+    const stack = [[0,0]]; seen[0][0] = true;
+    while (stack.length){
+      const [r,k] = stack[stack.length-1];
+      const opts = Object.keys(D).filter(d => { const nr = r + D[d][0], nk = k + D[d][1]; return nr >= 0 && nr < rows && nk >= 0 && nk < cols && !seen[nr][nk]; });
+      if (!opts.length){ stack.pop(); continue; }
+      const d = opts[Math.floor(Math.random() * opts.length)];
+      const nr = r + D[d][0], nk = k + D[d][1];
+      open[r][k][d] = 1; open[nr][nk][D[d][2]] = 1; seen[nr][nk] = true; stack.push([nr,nk]);
+    }
+    const cv = c.querySelector("#mz"), ctx = cv.getContext("2d");
+    cv.width = cols * CS; cv.height = rows * CS;
+    let pr = 0, pk = 0, fin = false;
+    const trail = new Set(["0,0"]);
+    function draw(){
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.fillStyle = "rgba(185,143,106,.2)";
+      trail.forEach(t => { const [r,k] = t.split(",").map(Number); ctx.fillRect(k*CS + 5, r*CS + 5, CS - 10, CS - 10); });
+      ctx.font = "24px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("🤍", (cols - .5) * CS, (rows - .5) * CS + 2);
+      ctx.fillStyle = "#b98f6a"; ctx.beginPath(); ctx.arc((pk + .5) * CS, (pr + .5) * CS, CS * .27, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#c9ccd1"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.beginPath();
+      for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++){
+        const x = k * CS, y = r * CS;
+        if (!open[r][k].N){ ctx.moveTo(x, y); ctx.lineTo(x + CS, y); }
+        if (!open[r][k].W){ ctx.moveTo(x, y); ctx.lineTo(x, y + CS); }
+        if (r === rows - 1 && !open[r][k].S){ ctx.moveTo(x, y + CS); ctx.lineTo(x + CS, y + CS); }
+        if (k === cols - 1 && !open[r][k].E){ ctx.moveTo(x + CS, y); ctx.lineTo(x + CS, y + CS); }
+      }
+      ctx.stroke();
+    }
+    function mover(d){
+      if (fin || !open[pr][pk][d]) return false;
+      pr += D[d][0]; pk += D[d][1]; trail.add(pr + "," + pk); draw();
+      if (pr === rows - 1 && pk === cols - 1){ fin = true; c.querySelector("#mzMsg").textContent = msgFinal; confetti(); }
+      return true;
+    }
+    draw();
+    c.querySelectorAll(".pad .mini").forEach(b => b.onclick = () => mover(b.dataset.d));
+    // arrastrar el dedo / mouse
+    let drag = false;
+    const celda = e => { const r = cv.getBoundingClientRect(); return [Math.floor((e.clientY - r.top) / r.height * rows), Math.floor((e.clientX - r.left) / r.width * cols)]; };
+    const seguir = e => {
+      const [tr, tk] = celda(e);
+      for (let g = 0; g < 4 && (tr !== pr || tk !== pk); g++){
+        const dr = tr - pr, dk = tk - pk;
+        const vert = Math.abs(dr) >= Math.abs(dk) && dr !== 0;
+        const d1 = vert ? (dr > 0 ? "S" : "N") : (dk > 0 ? "E" : "W");
+        if (mover(d1)) continue;
+        const alt = vert ? (dk > 0 ? "E" : dk < 0 ? "W" : null) : (dr > 0 ? "S" : dr < 0 ? "N" : null);
+        if (!alt || !mover(alt)) break;
+      }
+    };
+    cv.addEventListener("pointerdown", e => {
+      const [tr, tk] = celda(e);
+      if (Math.max(Math.abs(tr - pr), Math.abs(tk - pk)) > 2) return;   // hay que empezar cerca del punto
+      drag = true; try { cv.setPointerCapture(e.pointerId); } catch {} seguir(e);
+    });
+    cv.addEventListener("pointermove", e => { if (drag) seguir(e); });
+    cv.addEventListener("pointerup", () => { drag = false; });
+    cv.addEventListener("pointercancel", () => { drag = false; });
+    // teclado (compu)
+    const mapa = { ArrowUp:"N", ArrowDown:"S", ArrowLeft:"W", ArrowRight:"E" };
+    const kh = e => {
+      if (!document.body.contains(cv)){ document.removeEventListener("keydown", kh); return; }
+      if (mapa[e.key] && $("overlay").classList.contains("show")){ e.preventDefault(); mover(mapa[e.key]); }
+    };
+    document.addEventListener("keydown", kh);
+  };
+}
+
+function secreto(id, adivinanza, secretoHtml){
+  return c => {
+    const key = "secreto_" + id, t = $("mTitle"), b = $("mBig");
+    const revelar = animar => {
+      t.onclick = null; b.onclick = null; t.textContent = "Secreto 🤍";
+      c.innerHTML = '<div class="carta">' + secretoHtml + '<p class="firma">' + YO + '</p></div>';
+      if (animar) confetti();
+    };
+    if (lsGet(key, false)){ revelar(false); return; }
+    c.innerHTML = '<p class="hint">Una adivinanza</p><div class="riddle">' + adivinanza + '</div>';
+    let n = 0, timer = null;
+    const toque = e => {
+      n++; clearTimeout(timer); timer = setTimeout(() => { n = 0; }, 2500);
+      const el = e.currentTarget; el.classList.remove("tapx"); void el.offsetWidth; el.classList.add("tapx");
+      if (n >= 5){ lsSet(key, true); revelar(true); }
+    };
+    t.onclick = toque; b.onclick = toque;   // vale tocar el título o el número grande
+  };
+}
+
+function sopa(id, palabras, finalHtml){
+  const G = ["MBRNUDGP","FELICEST","ALVHZIKD","OMTCAPYB","LGRUXÑWE","DNEBJVOA","PCSKRHZS","UWFDMLXI"].map(r => r.split(""));
+  const N = 8;
+  const linea = (a, b) => {
+    const dr = b[0] - a[0], dc = b[1] - a[1], ar = Math.abs(dr), ac = Math.abs(dc);
+    let sr = Math.sign(dr), sc = Math.sign(dc), n = Math.max(ar, ac);
+    if (ar && ac && ar !== ac){ if (ar >= 2 * ac) sc = 0; else if (ac >= 2 * ar) sr = 0; else n = Math.round((ar + ac) / 2); }
+    const out = [];
+    for (let i = 0; i <= n; i++){ const r = a[0] + sr * i, k = a[1] + sc * i; if (r < 0 || r >= N || k < 0 || k >= N) break; out.push([r, k]); }
+    return out;
+  };
+  return c => {
+    const key = "sopa_" + id;
+    const guardado = lsGet(key, { words: [], cells: [] });
+    const words = new Set(guardado.words), foundCells = new Set(guardado.cells);
+    c.innerHTML = '<p class="hint">Encontrá las 3 palabras. Arrastrá el dedo sobre las letras (o tocá la primera y la última).</p>' +
+      '<div class="sopa" id="sp"></div><div class="words" id="wl"></div><div id="sopaFin"></div>';
+    const sp = c.querySelector("#sp"), wl = c.querySelector("#wl"), fin = c.querySelector("#sopaFin");
+    const cells = G.map((fila, r) => fila.map((ch, k) => {
+      const d = document.createElement("div"); d.className = "sc"; d.textContent = ch; d.dataset.r = r; d.dataset.c = k; sp.appendChild(d); return d;
+    }));
+    wl.innerHTML = palabras.map(w => '<span data-w="' + w + '">' + w + '</span>').join("");
+    let sel = [], anchor = null, drag = null, terminado = false;
+    const pintar = () => {
+      cells.forEach((fila, r) => fila.forEach((d, k) => { d.classList.toggle("found", foundCells.has(r + "," + k)); d.classList.toggle("sel", sel.some(p => p[0] === r && p[1] === k)); }));
+      wl.querySelectorAll("span").forEach(s => s.classList.toggle("ok", words.has(s.dataset.w)));
+    };
+    const terminar = animar => {
+      if (terminado) return; terminado = true;
+      fin.innerHTML = '<div class="carta fin">' + finalHtml + '<p class="firma">' + YO + '</p></div>';
+      if (animar) confetti();
+    };
+    const evaluar = () => {
+      const txt = sel.map(([r, k]) => G[r][k]).join(""), rev = txt.split("").reverse().join("");
+      const w = palabras.find(p => p === txt || p === rev);
+      if (w && !words.has(w)){
+        words.add(w); sel.forEach(([r, k]) => foundCells.add(r + "," + k));
+        lsSet(key, { words: [...words], cells: [...foundCells] });
+        toast("¡Encontraste “" + w.toLowerCase() + "”!");
+      }
+      sel = []; pintar();
+      if (words.size === palabras.length) terminar(true);
+    };
+    const celdaEn = e => {
+      const el = document.elementFromPoint(e.clientX, e.clientY), d = el && el.closest ? el.closest(".sc") : null;
+      return d && sp.contains(d) ? [+d.dataset.r, +d.dataset.c] : null;
+    };
+    sp.addEventListener("pointerdown", e => {
+      const p = celdaEn(e); if (!p) return;
+      try { sp.setPointerCapture(e.pointerId); } catch {}
+      drag = p; sel = [p]; pintar();
+    });
+    sp.addEventListener("pointermove", e => {
+      if (!drag) return; const p = celdaEn(e); if (!p) return;
+      sel = linea(drag, p); pintar();
+    });
+    sp.addEventListener("pointerup", () => {
+      if (!drag) return; const ini = drag; drag = null;
+      if (sel.length <= 1){                       // toque simple: primera y última letra
+        if (anchor){ sel = linea(anchor, ini); anchor = null; evaluar(); }
+        else { anchor = ini; sel = [ini]; pintar(); }
+      } else { anchor = null; evaluar(); }
+    });
+    sp.addEventListener("pointercancel", () => { drag = null; sel = []; pintar(); });
+    pintar();
+    if (words.size === palabras.length) terminar(false);
+  };
+}
+
 function ahorcado(palabra, msgFinal){
   return c => {
     const P = norm(palabra).toUpperCase();
@@ -517,7 +719,7 @@ const REGALOS = {
   3:  { titulo:"Rompecabezas", render: puzzle(3, 5, "Armá la foto. Tocá una pieza y después otra para intercambiarlas.") },
   4:  { titulo:"Rasca y gana", render: rasca("Un abrazo eterno", "Válido hoy y siempre") },
   5:  { titulo:"Regalo de verdad", render: fisico("🍫", "Hoy tu regalo es físico: un chocolate esperándote.<br>Pedímelo, o fijate si lo escondí por ahí.") },
-  6:  { titulo:"Memoria", render: memoria(["🎁","🍫","❄️","🎧","☕","💌","🧸","⭐"], "¡Qué buena memoria! 🤍") },
+  6:  { titulo:"Laberinto", render: laberinto(9, 11, "¡Llegaste! Siempre encuentro el camino hasta vos 🤍") },
   7:  { titulo:"Vale por una peli", render: vale(7, "Noche de peli a tu elección", "Elegís la peli, yo pongo la comida y no me quejo de la elección.") },
   8:  { titulo:"¿Cuánto me conocés?", render: quiz(QUIZ1, ["Tenemos que hablar más 😅","Algo sabés, vamos bien","Me conocés bastante","¡Me conocés mejor que yo mismo!"]) },
   9:  { titulo:"Abrir cuando necesites un abrazo", render: carta("Si estás leyendo esto es porque hoy necesitabas algo lindo.\n\nQuiero que sepas que no importa qué día tuviste: estoy de tu lado, siempre. Respirá, tomá algo calentito y acordate de lo fuerte que sos.\n\nCuando nos veamos, me debés un abrazo largo. Yo también necesito uno.") },
@@ -532,8 +734,8 @@ const REGALOS = {
   18: { titulo:"Vale por una cita", render: vale(18, "Una cita organizada por vos", "Elegís lugar, hora y plan. Yo me ocupo de llegar con una sonrisa y la billetera.") },
   19: { titulo:"Regalo de verdad", render: fisico("🎁", "Hoy tu regalo es algo chiquito que podés llevar con vos.<br>Pedímelo y descubrí qué es.") },
   20: { titulo:"Verdadero o falso", render: quiz(QUIZ2, ["Te falta conocerme 😄","No está mal, pero podés más","¡Casi perfecto!","¡Sabés todo sobre mí!"]) },
-  21: { titulo:"Memoria difícil", render: memoria(["🎄","⛄","🦌","🔔","🍪","🧦","🕯️","🎅"], "¡Sos una máquina! 🤍") },
-  22: { titulo:"Ruleta de retos", render: ruleta(22, [{e:"📸",t:"Foto mia de lo que quieras"},{e:"💌",t:"Decime 3 cosas que te gustan de mí"},{e:"🎶",t:"Subis una notita con una cancion para mi"},{e:"🤗",t:"Abrazo de 1 minuto sin hablar"},{e:"🍫",t:"Yo pago algo dulce"},{e:"❓",t:"Nada segui participando"}]) },
+  21: { titulo:"Adivinanza", render: secreto(21, ADIVINANZA2, SECRETO_HTML) },
+  22: { titulo:"Sopa de letras", render: sopa(22, ["FELICES","TRES","AÑOS"], ANIV_HTML) },
   23: { titulo:"Vale por un día entero", render: vale(23, "Un día entero a tu elección", "Del desayuno a la noche: vos decidís qué hacemos y yo te acompaño en todo.") },
   24: { titulo:"Nochebuena", render: carta("Llegamos a Nochebuena, " + ELLA + ".\n\nQuería usar estas últimas líneas para decirte gracias: por el año, por las risas, por tu paciencia y por hacer que todo sea más lindo.\n\nMañana es el último día del calendario y tiene su sorpresa. Hoy solo quiero que disfrutes, que comas rico y que sientas lo querida que sos.\n\nFeliz Nochebuena. Te quiero muchísimo.") },
   25: { titulo:"Búsqueda del tesoro", render: tesoro() },
@@ -601,6 +803,7 @@ function abrir(n){
   const r = REGALOS[n];
   $("mBig").textContent = n;
   $("mTitle").textContent = r.titulo || "Tu regalo del día";
+  $("mTitle").onclick = null; $("mBig").onclick = null;
   const body = $("mBody"); body.innerHTML = "";
   $("overlay").classList.add("show");
   r.render(body);
